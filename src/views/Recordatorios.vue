@@ -4,7 +4,7 @@ import { addDoc, collection, getFirestore, doc, deleteDoc, setDoc, query, where,
 import { getAuth, onAuthStateChanged, signOut, setPersistence, browserSessionPersistence } from "firebase/auth";
 import { useCollection } from "vuefire";
 import router from '../router/index';
-
+import AltaRecordatorio from '../components/supabaseStorage.vue';
 const db = getFirestore();
 const auth = getAuth();
 
@@ -19,6 +19,7 @@ const edittext = ref("");
 const prioridad = { 1: "Alta", 2: "Medio", 3: "Bajo" };
 const prioridadNueva = ref(3);
 let esAdmin = ref(false);
+const altaRef = ref(null);
 
 onAuthStateChanged(auth, (user) => {
   if (user) {
@@ -49,6 +50,7 @@ function cerrarSesion() {
 }
 
 async function agregarElemento() {
+  const url = await altaRef.value.altaRecordatorio();
   await addDoc(collection(db, "Recuerdos"), {
     nombreRec: text.value,
     editando: false,
@@ -57,6 +59,7 @@ async function agregarElemento() {
     prioridad: prioridadNueva.value,
     tiempo: serverTimestamp(),
     completado: false,
+    archivoUrl: url,
   });
   text.value = "";
   prioridadNueva.value = 3;
@@ -71,6 +74,7 @@ async function cambiarPrioridad(elemento, valor) {
     prioridad: valor,
     tiempo: elemento.tiempo,
     completado: elemento.completado,
+    archivoUrl: elemento.archivoUrl || "",
   });
 }
 
@@ -87,12 +91,12 @@ async function guardarEditado(id,completado) {
     prioridad: "",
     tiempo: serverTimestamp(),
     completado: completado,
+    archivoUrl: elemento.archivoUrl || "",
   });
   edittext.value = "";
 }
 
 function tiempoRelativo(timestamp) {
-  if (!timestamp) return "";
   const ahora = Date.now();
   const fecha = timestamp.toDate().getTime();
   const diff = Math.floor((ahora - fecha) / 1000);
@@ -138,11 +142,13 @@ function borrarCompletados() {
   <p class="contador">{{ recuerdos.filter(r => !r.completado).length }} / {{ recuerdos.length }} pendientes</p>
   <div class="input-grupal">
     <input v-model="text" type="text" @keyup.enter="agregarElemento" placeholder="Añadir recordatorio...">
+    <AltaRecordatorio ref="altaRef" />
     <button class="btn-principal" @click="agregarElemento">Añadir</button>
   </div>
   
   <ul>
-    <li v-for="Elemento in recuerdos" :key="Elemento.id" class="item-lista">
+    <TransitionGroup name="list" v-for="Elemento in recuerdos" :key="Elemento.id">
+      <div :key="Elemento.id" class="item-lista">
       <div class="item-contenido">
         <input type="checkbox" :checked="Elemento.completado" @change="setDoc(doc(db, 'Recuerdos', Elemento.id), {...Elemento, completado: !Elemento.completado})">
         <div class="texto-grupo">
@@ -164,6 +170,8 @@ function borrarCompletados() {
         </div>
       </div>
       <div class="acciones">
+
+      <a v-if="Elemento.archivoUrl" :href="`${Elemento.archivoUrl}?download=`" download class="btn-icon descargar">🖇️</a>
         <template v-if="!Elemento.editando">
           <button class="btn-icon editar" @click="Elemento.editando = true; edittext = Elemento.nombreRec">✎</button>
           <button class="btn-icon borrar" @click="borrarElemento(Elemento.id)">✕</button>
@@ -173,7 +181,8 @@ function borrarCompletados() {
           <button class="btn-cancel" @click="Elemento.editando = false">✕</button>
         </template>
       </div>
-    </li>
+      </div>
+    </TransitionGroup>
   </ul>
   <button class="btn-borrar-completados" @click="borrarCompletados">Borrar Realizados</button>
   <button class="btn-borrar-todo" @click="borrarTodo">Borrar todo</button>
@@ -293,7 +302,7 @@ input[type="checkbox"] {
   margin-top: 5px;
   width: 18px;
   height: 18px;
-  accent-color: #ffffff;
+  accent-color: green;
   cursor: pointer;
 }
 
@@ -311,7 +320,7 @@ input[type="checkbox"] {
 
 .tachado {
   text-decoration: line-through;
-  color: rgba(255, 255, 255, 0.3);
+  color: green;
 }
 
 .tiempo-relativo {
@@ -487,5 +496,44 @@ button[onClick*="Admin"]:hover {
   font-size: 0.85rem;
   color: rgba(255, 255, 255, 0.5);
   margin-bottom: 16px;
+}
+
+.list-enter-active,
+.list-leave-active {
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.list-leave-active {
+  position: absolute;
+}
+
+.list-enter-from {
+  opacity: 0;
+  transform: translateX(30px);
+  filter: blur(10px);
+}
+
+.list-leave-to {
+  opacity: 0;
+  transform: scale(0.9);
+  filter: blur(5px);
+}
+
+.list-move {
+  transition: transform 0.4s ease;
+}
+
+.descargar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  color: #4ade80;
+  border-color: rgba(74, 222, 128, 0.4);
+}
+
+.descargar:hover {
+  background: rgba(74, 222, 128, 0.2);
+  border-color: #4ade80;
 }
 </style>
